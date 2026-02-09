@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { EmptyState } from '@/components/layout/empty-state'
 import { formatCurrency, formatMonth, formatDate } from '@/lib/utils'
 import { getDeposits } from '@/actions/deposits'
+import { DepositActions } from '@/components/deposits/deposit-actions'
 
 export default async function DepositosPage() {
   const deposits = await getDeposits()
@@ -51,6 +52,7 @@ export default async function DepositosPage() {
                   <TableHead>Descrição</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Alocações</TableHead>
+                  <TableHead className="w-[80px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -77,6 +79,9 @@ export default async function DepositosPage() {
                           </Badge>
                         ))}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <DepositActions depositId={dep.id} />
                     </TableCell>
                   </TableRow>
                 ))}

@@ -10,32 +10,67 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react'
-import { createDepositWithAllocations } from '@/actions/deposits'
+import { createDepositWithAllocations, updateDepositWithAllocations } from '@/actions/deposits'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
 import type { Card as CardType, Area } from '@/types/database'
+
+interface DepositData {
+  id: string
+  card_id: string
+  amount: number
+  reference_month: string
+  description: string | null
+  allocations?: { id: string; area_id: string; amount: number }[]
+}
 
 interface DepositWizardProps {
   cards: CardType[]
   areas: Area[]
+  deposit?: DepositData
 }
 
-export function DepositWizard({ cards, areas }: DepositWizardProps) {
+export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
   const router = useRouter()
+  const isEditing = !!deposit
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
 
   // Step 1 fields
-  const [cardId, setCardId] = useState('')
-  const [amount, setAmount] = useState('')
-  const [referenceMonth, setReferenceMonth] = useState(getMonthOptions()[0].value)
-  const [description, setDescription] = useState('')
+  const [cardId, setCardId] = useState(deposit?.card_id || '')
+  const [amount, setAmount] = useState(deposit ? String(deposit.amount) : '')
+  const [referenceMonth, setReferenceMonth] = useState(() => {
+    if (deposit?.reference_month) {
+      // Normalize to YYYY-MM-01 format
+      const d = new Date(deposit.reference_month)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+    }
+    return getMonthOptions()[0].value
+  })
+  const [description, setDescription] = useState(deposit?.description || '')
 
-  // Step 2 fields
-  const [allocations, setAllocations] = useState<Record<string, string>>({})
+  // Step 2 fields - pre-fill from existing allocations
+  const [allocations, setAllocations] = useState<Record<string, string>>(() => {
+    if (deposit?.allocations) {
+      const alloc: Record<string, string> = {}
+      deposit.allocations.forEach((a) => {
+        alloc[a.area_id] = String(a.amount)
+      })
+      return alloc
+    }
+    return {}
+  })
 
   const activeAreas = areas.filter((a) => a.is_active)
   const parsedAmount = parseFloat(amount) || 0
-  const monthOptions = getMonthOptions()
+  const monthOptions = getMonthOptions(24)
+
+  // Include deposit's month in options if not already present
+  const monthSet = new Set(monthOptions.map(m => m.value))
+  if (referenceMonth && !monthSet.has(referenceMonth)) {
+    const d = new Date(referenceMonth)
+    const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(d)
+    monthOptions.push({ value: referenceMonth, label })
+  }
 
   const allocTotal = Object.values(allocations).reduce(
     (sum, val) => sum + (parseFloat(val) || 0),
@@ -70,7 +105,8 @@ export function DepositWizard({ cards, areas }: DepositWizardProps) {
     }
 
     setLoading(true)
-    const result = await createDepositWithAllocations({
+
+    const payload = {
       card_id: cardId,
       amount: parsedAmount,
       reference_month: referenceMonth,
@@ -81,7 +117,11 @@ export function DepositWizard({ cards, areas }: DepositWizardProps) {
           area_id: a.id,
           amount: parseFloat(allocations[a.id] || '0'),
         })),
-    })
+    }
+
+    const result = isEditing
+      ? await updateDepositWithAllocations(deposit.id, payload)
+      : await createDepositWithAllocations(payload)
 
     setLoading(false)
 
@@ -90,7 +130,7 @@ export function DepositWizard({ cards, areas }: DepositWizardProps) {
       return
     }
 
-    toast.success('Depósito criado com sucesso!')
+    toast.success(isEditing ? 'Depósito atualizado com sucesso!' : 'Depósito criado com sucesso!')
     router.push('/depositos')
   }
 
@@ -242,7 +282,7 @@ export function DepositWizard({ cards, areas }: DepositWizardProps) {
               {loading ? 'Salvando...' : (
                 <>
                   <Check className="mr-2 h-4 w-4" />
-                  Confirmar Depósito
+                  {isEditing ? 'Salvar Alterações' : 'Confirmar Depósito'}
                 </>
               )}
             </Button>
