@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, CreditCard } from 'lucide-react'
+import { ArrowLeft, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -31,12 +31,20 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
   return (
     <>
       <PageHeader title={card.name} description={`${card.bank} •••• ${card.last_four_digits}`}>
-        <Link href="/cartoes">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/cartoes">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Button>
+          </Link>
+          <Link href={`/cartoes/${id}/editar`}>
+            <Button size="sm">
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+          </Link>
+        </div>
       </PageHeader>
 
       {/* Balance Summary */}
