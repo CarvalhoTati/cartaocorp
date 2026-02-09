@@ -37,19 +37,19 @@ export async function updateSession(request: NextRequest) {
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/signup') &&
-    !request.nextUrl.pathname.startsWith('/auth')
+    !request.nextUrl.pathname.startsWith('/auth') &&
+    !request.nextUrl.pathname.startsWith('/esqueci-senha') &&
+    !request.nextUrl.pathname.startsWith('/redefinir-senha')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // If logged in and on login/signup, redirect to dashboard
+  // If logged in and on login, redirect to dashboard
   if (
     user &&
-    (request.nextUrl.pathname.startsWith('/login') ||
-      request.nextUrl.pathname.startsWith('/signup'))
+    request.nextUrl.pathname.startsWith('/login')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'

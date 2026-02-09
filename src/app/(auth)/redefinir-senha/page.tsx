@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,35 +10,41 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
 
-function LoginForm() {
-  const [email, setEmail] = useState('')
+export default function RedefinirSenhaPage() {
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const senhaAtualizada = searchParams.get('msg') === 'senha-atualizada'
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+
+    if (password.length < 6) {
+      setError('A senha deve ter no mínimo 6 caracteres')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('As senhas não coincidem')
+      return
+    }
+
     setLoading(true)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error } = await supabase.auth.updateUser({ password })
 
     if (error) {
-      setError('Email ou senha inválidos')
+      setError(error.message)
       setLoading(false)
       return
     }
 
-    router.push('/dashboard')
-    router.refresh()
+    router.push('/login?msg=senha-atualizada')
   }
 
   return (
@@ -48,38 +53,24 @@ function LoginForm() {
         <div className="flex justify-center mb-4">
           <Image src="/logo.png" alt="DentalPlus" width={200} height={56} className="object-contain" />
         </div>
-        <CardDescription>Faça login para continuar</CardDescription>
+        <CardTitle className="text-2xl">Redefinir senha</CardTitle>
+        <CardDescription>Crie uma nova senha para sua conta</CardDescription>
       </CardHeader>
-      <form onSubmit={handleLogin}>
+      <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
-          {senhaAtualizada && (
-            <div className="p-3 rounded-md bg-green-100 text-green-800 text-sm">
-              Senha atualizada com sucesso! Faça login com sua nova senha.
-            </div>
-          )}
           {error && (
             <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
               {error}
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
+            <Label htmlFor="password">Nova senha</Label>
             <div className="relative">
               <Input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
+                placeholder="Mínimo 6 caracteres"
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -93,28 +84,36 @@ function LoginForm() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            <Link
-              href="/esqueci-senha"
-              className="text-sm text-muted-foreground hover:text-primary inline-block mt-1"
-            >
-              Esqueci minha senha
-            </Link>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Repita a senha"
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? 'Salvando...' : 'Redefinir senha'}
           </Button>
         </CardFooter>
       </form>
     </Card>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
   )
 }
