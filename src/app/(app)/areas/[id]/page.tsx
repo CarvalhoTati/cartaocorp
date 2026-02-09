@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -39,12 +39,20 @@ export default async function AreaDetailPage({ params }: { params: Promise<{ id:
         title={area.name}
         description={area.description || 'Sem descrição'}
       >
-        <Link href="/areas">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/areas">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Button>
+          </Link>
+          <Link href={`/areas/${id}/editar`}>
+            <Button size="sm">
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+          </Link>
+        </div>
       </PageHeader>
 
       {/* Summary */}
