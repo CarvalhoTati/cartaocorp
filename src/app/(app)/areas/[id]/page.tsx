@@ -1,12 +1,14 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PageHeader } from '@/components/layout/page-header'
+import { BudgetLineActions } from '@/components/budget-lines/budget-line-actions'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getArea, getAreaCardBalances } from '@/actions/areas'
+import { getBudgetLineBalances } from '@/actions/budget-lines'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function AreaDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,8 +22,9 @@ export default async function AreaDetailPage({ params }: { params: Promise<{ id:
   }
 
   const supabase = await createClient()
-  const [cardBalances, { data: expenses }] = await Promise.all([
+  const [cardBalances, budgetLineBalances, { data: expenses }] = await Promise.all([
     getAreaCardBalances(id),
+    getBudgetLineBalances(id),
     supabase
       .from('expenses')
       .select('*, card:cards(name, last_four_digits)')
@@ -113,6 +116,72 @@ export default async function AreaDetailPage({ params }: { params: Promise<{ id:
           </CardContent>
         </Card>
       )}
+
+      {/* Budget Lines (Rubricas) */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Rubricas</CardTitle>
+          <Link href={`/areas/${id}/rubricas/nova`}>
+            <Button size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Nova Rubrica
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {budgetLineBalances.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma rubrica cadastrada.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="text-right">Planejado</TableHead>
+                  <TableHead className="text-right">Gasto</TableHead>
+                  <TableHead className="text-right">Saldo</TableHead>
+                  <TableHead className="w-[200px]">Progresso</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {budgetLineBalances.map((bl: any) => {
+                  const planned = Number(bl.planned_amount)
+                  const spent = Number(bl.spent)
+                  const pct = planned > 0 ? (spent / planned) * 100 : 0
+                  const barColor = pct > 100 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-green-500'
+
+                  return (
+                    <TableRow key={bl.id}>
+                      <TableCell className="font-medium">{bl.name}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(planned)}</TableCell>
+                      <TableCell className="text-right text-red-600">{formatCurrency(spent)}</TableCell>
+                      <TableCell className={`text-right font-semibold ${Number(bl.balance) < 0 ? 'text-red-600' : ''}`}>
+                        {formatCurrency(Number(bl.balance))}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${barColor}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-10 text-right">
+                            {pct.toFixed(0)}%
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <BudgetLineActions areaId={id} lineId={bl.id} />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Recent Expenses */}
       {expenses && expenses.length > 0 && (

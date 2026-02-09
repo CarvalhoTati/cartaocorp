@@ -24,9 +24,18 @@ export const allocationSchema = z.object({
   amount: z.number().min(0, 'Valor não pode ser negativo'),
 })
 
+export const budgetLineSchema = z.object({
+  area_id: z.string().uuid(),
+  name: z.string().min(1, 'Nome é obrigatório'),
+  planned_amount: z.number().positive('Valor deve ser positivo'),
+  reference_month: z.string().min(1, 'Mês é obrigatório'),
+  description: z.string().optional(),
+})
+
 export const expenseSchema = z.object({
   card_id: z.string().uuid('Selecione um cartão'),
   area_id: z.string().uuid('Selecione uma área'),
+  budget_line_id: z.string().uuid().optional(),
   amount: z.number().positive('Valor deve ser positivo'),
   description: z.string().min(1, 'Descrição é obrigatória'),
   expense_date: z.string().min(1, 'Data é obrigatória'),
@@ -37,4 +46,5 @@ export type CardFormData = z.infer<typeof cardSchema>
 export type AreaFormData = z.infer<typeof areaSchema>
 export type DepositFormData = z.infer<typeof depositSchema>
 export type AllocationFormData = z.infer<typeof allocationSchema>
+export type BudgetLineFormData = z.infer<typeof budgetLineSchema>
 export type ExpenseFormData = z.infer<typeof expenseSchema>

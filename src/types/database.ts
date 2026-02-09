@@ -43,10 +43,35 @@ export interface Allocation {
   area?: Area
 }
 
+export interface BudgetLine {
+  id: string
+  area_id: string
+  name: string
+  planned_amount: number
+  reference_month: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetLineBalance {
+  id: string
+  area_id: string
+  name: string
+  planned_amount: number
+  reference_month: string
+  description: string | null
+  is_active: boolean
+  spent: number
+  balance: number
+}
+
 export interface Expense {
   id: string
   card_id: string
   area_id: string
+  budget_line_id?: string
   amount: number
   description: string
   expense_date: string
@@ -56,6 +81,7 @@ export interface Expense {
   card?: Card
   area?: Area
   profile?: Profile
+  budget_line?: BudgetLine
 }
 
 // View types

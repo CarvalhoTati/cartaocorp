@@ -44,6 +44,7 @@ export function ExpenseList({ expenses, isAdmin }: ExpenseListProps) {
             <TableHead>Descrição</TableHead>
             <TableHead>Cartão</TableHead>
             <TableHead>Área</TableHead>
+            <TableHead>Rubrica</TableHead>
             <TableHead>Criado por</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             {isAdmin && <TableHead className="w-10" />}
@@ -63,6 +64,7 @@ export function ExpenseList({ expenses, isAdmin }: ExpenseListProps) {
                   {exp.area?.name}
                 </div>
               </TableCell>
+              <TableCell className="text-muted-foreground">{exp.budget_line?.name || '-'}</TableCell>
               <TableCell>{exp.profile?.full_name || '-'}</TableCell>
               <TableCell className="text-right font-medium text-red-600">
                 {formatCurrency(exp.amount)}

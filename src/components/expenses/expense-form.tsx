@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createExpense, getAvailableBalance } from '@/actions/expenses'
+import { createExpense, getAvailableBalance, getBudgetLineBalance } from '@/actions/expenses'
+import { getBudgetLines } from '@/actions/budget-lines'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
-import type { Card as CardType, Area } from '@/types/database'
+import type { Card as CardType, Area, BudgetLine } from '@/types/database'
 
 interface ExpenseFormProps {
   cards: CardType[]
@@ -27,12 +28,37 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
   const [description, setDescription] = useState('')
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0])
   const [referenceMonth, setReferenceMonth] = useState(getMonthOptions()[0].value)
+  const [budgetLineId, setBudgetLineId] = useState('')
+  const [budgetLinesForArea, setBudgetLinesForArea] = useState<BudgetLine[]>([])
+  const [budgetLineBalance, setBudgetLineBalance] = useState<number | null>(null)
   const [availableBalance, setAvailableBalance] = useState<number | null>(null)
   const [loadingBalance, setLoadingBalance] = useState(false)
 
   const monthOptions = getMonthOptions()
   const parsedAmount = parseFloat(amount) || 0
   const exceedsBalance = availableBalance !== null && parsedAmount > availableBalance
+
+  useEffect(() => {
+    if (areaId) {
+      getBudgetLines(areaId).then((lines) => {
+        setBudgetLinesForArea(lines)
+      })
+    } else {
+      setBudgetLinesForArea([])
+    }
+    setBudgetLineId('')
+    setBudgetLineBalance(null)
+  }, [areaId])
+
+  useEffect(() => {
+    if (budgetLineId) {
+      getBudgetLineBalance(budgetLineId).then((balance) => {
+        setBudgetLineBalance(balance)
+      })
+    } else {
+      setBudgetLineBalance(null)
+    }
+  }, [budgetLineId])
 
   useEffect(() => {
     if (cardId && areaId) {
@@ -54,14 +80,18 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
     }
 
     setLoading(true)
-    const result = await createExpense({
+    const expenseData: Parameters<typeof createExpense>[0] = {
       card_id: cardId,
       area_id: areaId,
       amount: parsedAmount,
       description,
       expense_date: expenseDate,
       reference_month: referenceMonth,
-    })
+    }
+    if (budgetLineId) {
+      expenseData.budget_line_id = budgetLineId
+    }
+    const result = await createExpense(expenseData)
 
     setLoading(false)
 
@@ -133,6 +163,31 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
                   Saldo disponível: <span className="font-bold">{formatCurrency(availableBalance || 0)}</span>
                   {exceedsBalance && ' — Valor excede o saldo!'}
                 </>
+              )}
+            </div>
+          )}
+
+          {/* Budget Line (Rubrica) - optional */}
+          {areaId && budgetLinesForArea.length > 0 && (
+            <div className="space-y-2">
+              <Label>Rubrica (opcional)</Label>
+              <Select value={budgetLineId || 'none'} onValueChange={(v) => setBudgetLineId(v === 'none' ? '' : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sem rubrica" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem rubrica</SelectItem>
+                  {budgetLinesForArea.map((bl) => (
+                    <SelectItem key={bl.id} value={bl.id}>
+                      {bl.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {budgetLineId && budgetLineBalance !== null && (
+                <p className="text-sm text-muted-foreground">
+                  Saldo da rubrica: <span className="font-semibold">{formatCurrency(budgetLineBalance)}</span>
+                </p>
               )}
             </div>
           )}
