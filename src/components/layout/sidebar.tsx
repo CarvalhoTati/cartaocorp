@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import Image from 'next/image'
 import {
   LayoutDashboard,
   CreditCard,
@@ -36,8 +37,11 @@ export function Sidebar() {
       )}
     >
       <div className={cn('flex items-center h-16 border-b px-4', collapsed ? 'justify-center' : 'gap-2')}>
-        <CreditCard className="h-6 w-6 text-primary shrink-0" />
-        {!collapsed && <span className="font-bold text-lg">CartaoCorp</span>}
+        {collapsed ? (
+          <Image src="/logo.png" alt="DentalPlus" width={32} height={32} className="shrink-0" />
+        ) : (
+          <Image src="/logo.png" alt="DentalPlus" width={140} height={40} className="shrink-0 object-contain" />
+        )}
       </div>
 
       <nav className="flex-1 py-4 space-y-1 px-2">

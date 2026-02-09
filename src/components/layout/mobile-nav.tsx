@@ -11,6 +11,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import Image from 'next/image'
 import {
   LayoutDashboard,
   CreditCard,
@@ -45,8 +46,8 @@ export function MobileNav() {
       </SheetTrigger>
       <SheetContent side="left" className="w-60 p-0">
         <SheetHeader className="border-b px-4 h-16 flex flex-row items-center gap-2">
-          <CreditCard className="h-6 w-6 text-primary" />
-          <SheetTitle className="text-lg">CartaoCorp</SheetTitle>
+          <Image src="/logo.png" alt="DentalPlus" width={140} height={40} className="object-contain" />
+          <SheetTitle className="sr-only">DentalPlus</SheetTitle>
         </SheetHeader>
         <nav className="py-4 space-y-1 px-2">
           {navItems.map((item) => {

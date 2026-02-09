@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { CreditCard } from 'lucide-react'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -41,12 +41,9 @@ export default function LoginPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <div className="flex justify-center mb-2">
-          <div className="p-3 rounded-full bg-primary/10">
-            <CreditCard className="h-8 w-8 text-primary" />
-          </div>
+        <div className="flex justify-center mb-4">
+          <Image src="/logo.png" alt="DentalPlus" width={200} height={56} className="object-contain" />
         </div>
-        <CardTitle className="text-2xl">CartaoCorp</CardTitle>
         <CardDescription>Faça login para continuar</CardDescription>
       </CardHeader>
       <form onSubmit={handleLogin}>
