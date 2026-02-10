@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PageHeader } from '@/components/layout/page-header'
 import { BudgetLineActions } from '@/components/budget-lines/budget-line-actions'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, formatMonth } from '@/lib/utils'
 import { getArea, getAreaCardBalances } from '@/actions/areas'
 import { getBudgetLineBalances } from '@/actions/budget-lines'
 import { createClient } from '@/lib/supabase/server'
@@ -118,70 +118,115 @@ export default async function AreaDetailPage({ params }: { params: Promise<{ id:
       )}
 
       {/* Budget Lines (Rubricas) */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Rubricas</CardTitle>
-          <Link href={`/areas/${id}/rubricas/nova`}>
-            <Button size="sm">
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Rubrica
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {budgetLineBalances.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma rubrica cadastrada.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead className="text-right">Planejado</TableHead>
-                  <TableHead className="text-right">Gasto</TableHead>
-                  <TableHead className="text-right">Saldo</TableHead>
-                  <TableHead className="w-[200px]">Progresso</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {budgetLineBalances.map((bl: any) => {
-                  const planned = Number(bl.planned_amount)
-                  const spent = Number(bl.spent)
-                  const pct = planned > 0 ? (spent / planned) * 100 : 0
-                  const barColor = pct > 100 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-green-500'
+      {(() => {
+        const totalPlanned = budgetLineBalances.reduce((sum: number, bl: any) => sum + Number(bl.planned_amount), 0)
+        const totalBLSpent = budgetLineBalances.reduce((sum: number, bl: any) => sum + Number(bl.spent), 0)
+        const unplanned = totalAllocated - totalPlanned
+        const exceeds = totalPlanned > totalAllocated
 
-                  return (
-                    <TableRow key={bl.id}>
-                      <TableCell className="font-medium">{bl.name}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(planned)}</TableCell>
-                      <TableCell className="text-right text-red-600">{formatCurrency(spent)}</TableCell>
-                      <TableCell className={`text-right font-semibold ${Number(bl.balance) < 0 ? 'text-red-600' : ''}`}>
-                        {formatCurrency(Number(bl.balance))}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${barColor}`}
-                              style={{ width: `${Math.min(pct, 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-muted-foreground w-10 text-right">
-                            {pct.toFixed(0)}%
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <BudgetLineActions areaId={id} lineId={bl.id} />
-                      </TableCell>
+        return (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Rubricas</CardTitle>
+                {budgetLineBalances.length > 0 && (
+                  <p className={`text-sm mt-1 ${exceeds ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                    {formatCurrency(totalPlanned)} de {formatCurrency(totalAllocated)} distribuídos
+                    {exceeds
+                      ? ` — excede em ${formatCurrency(totalPlanned - totalAllocated)}`
+                      : unplanned > 0
+                      ? ` — ${formatCurrency(unplanned)} sem rubrica`
+                      : ''}
+                  </p>
+                )}
+              </div>
+              <Link href={`/areas/${id}/rubricas/nova`}>
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova Rubrica
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {budgetLineBalances.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma rubrica cadastrada.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Mês</TableHead>
+                      <TableHead className="text-right">Planejado</TableHead>
+                      <TableHead className="text-right">Gasto</TableHead>
+                      <TableHead className="text-right">Saldo Mês</TableHead>
+                      <TableHead className="text-right">Saldo Acumulado</TableHead>
+                      <TableHead className="w-[180px]">Uso</TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {budgetLineBalances.map((bl: any) => {
+                      const accPlanned = Number(bl.accumulated_planned)
+                      const accSpent = Number(bl.accumulated_spent)
+                      const accBalance = Number(bl.accumulated_balance)
+                      const pct = accPlanned > 0 ? (accSpent / accPlanned) * 100 : 0
+                      const barColor = pct > 100 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-blue-500'
+
+                      return (
+                        <TableRow key={bl.id}>
+                          <TableCell className="font-medium">{bl.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground capitalize whitespace-nowrap">
+                            {formatMonth(bl.reference_month)}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(bl.planned_amount))}</TableCell>
+                          <TableCell className="text-right text-red-600">{formatCurrency(Number(bl.spent))}</TableCell>
+                          <TableCell className={`text-right ${Number(bl.balance) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                            {formatCurrency(Number(bl.balance))}
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold ${accBalance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrency(accBalance)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${barColor}`}
+                                  style={{ width: `${Math.min(pct, 100)}%` }}
+                                />
+                              </div>
+                              <span className={`text-xs w-12 text-right ${pct > 100 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                                {pct.toFixed(0)}%
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <BudgetLineActions areaId={id} lineId={bl.id} />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {/* Totals row */}
+                    <TableRow className="border-t-2 font-semibold bg-muted/50">
+                      <TableCell>Total</TableCell>
+                      <TableCell />
+                      <TableCell className={`text-right ${exceeds ? 'text-red-600' : ''}`}>
+                        {formatCurrency(totalPlanned)}
+                      </TableCell>
+                      <TableCell className="text-right text-red-600">{formatCurrency(totalBLSpent)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(totalPlanned - totalBLSpent)}
+                      </TableCell>
+                      <TableCell />
+                      <TableCell />
+                      <TableCell />
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Recent Expenses */}
       {expenses && expenses.length > 0 && (

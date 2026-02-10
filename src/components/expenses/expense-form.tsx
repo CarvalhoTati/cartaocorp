@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -9,26 +9,31 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createExpense, getAvailableBalance, getBudgetLineBalance } from '@/actions/expenses'
+import { createExpense, updateExpense, getAvailableBalance, getBudgetLineBalance } from '@/actions/expenses'
+import { getAreasForCard } from '@/actions/areas'
 import { getBudgetLines } from '@/actions/budget-lines'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
-import type { Card as CardType, Area, BudgetLine } from '@/types/database'
+import type { Card as CardType, Area, BudgetLine, Expense } from '@/types/database'
 
 interface ExpenseFormProps {
   cards: CardType[]
   areas: Area[]
+  expense?: Expense
 }
 
-export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
+export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProps) {
   const router = useRouter()
+  const isEditing = !!expense
   const [loading, setLoading] = useState(false)
-  const [cardId, setCardId] = useState('')
-  const [areaId, setAreaId] = useState('')
-  const [amount, setAmount] = useState('')
-  const [description, setDescription] = useState('')
-  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0])
-  const [referenceMonth, setReferenceMonth] = useState(getMonthOptions()[0].value)
-  const [budgetLineId, setBudgetLineId] = useState('')
+  const [cardId, setCardId] = useState(expense?.card_id || '')
+  const [areaId, setAreaId] = useState(expense?.area_id || '')
+  const [amount, setAmount] = useState(expense ? String(expense.amount) : '')
+  const [description, setDescription] = useState(expense?.description || '')
+  const [expenseDate, setExpenseDate] = useState(expense?.expense_date || new Date().toISOString().split('T')[0])
+  const [referenceMonth, setReferenceMonth] = useState(expense?.reference_month || getMonthOptions()[0].value)
+  const [filteredAreas, setFilteredAreas] = useState<Area[]>(allAreas)
+  const [loadingAreas, setLoadingAreas] = useState(false)
+  const [budgetLineId, setBudgetLineId] = useState(expense?.budget_line_id || '')
   const [budgetLinesForArea, setBudgetLinesForArea] = useState<BudgetLine[]>([])
   const [budgetLineBalance, setBudgetLineBalance] = useState<number | null>(null)
   const [availableBalance, setAvailableBalance] = useState<number | null>(null)
@@ -37,6 +42,26 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
   const monthOptions = getMonthOptions()
   const parsedAmount = parseFloat(amount) || 0
   const exceedsBalance = availableBalance !== null && parsedAmount > availableBalance
+  const isFirstRender = useRef(true)
+  const isFirstCardChange = useRef(true)
+
+  useEffect(() => {
+    if (!cardId) {
+      setFilteredAreas(allAreas)
+      return
+    }
+    setLoadingAreas(true)
+    getAreasForCard(cardId).then((areas) => {
+      setFilteredAreas(areas)
+      setLoadingAreas(false)
+      if (isFirstCardChange.current) {
+        isFirstCardChange.current = false
+      } else {
+        setAreaId('')
+        setAvailableBalance(null)
+      }
+    })
+  }, [cardId])
 
   useEffect(() => {
     if (areaId) {
@@ -46,8 +71,12 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
     } else {
       setBudgetLinesForArea([])
     }
-    setBudgetLineId('')
-    setBudgetLineBalance(null)
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+    } else {
+      setBudgetLineId('')
+      setBudgetLineBalance(null)
+    }
   }, [areaId])
 
   useEffect(() => {
@@ -83,15 +112,16 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
     const expenseData: Parameters<typeof createExpense>[0] = {
       card_id: cardId,
       area_id: areaId,
+      budget_line_id: budgetLineId,
       amount: parsedAmount,
       description,
       expense_date: expenseDate,
       reference_month: referenceMonth,
     }
-    if (budgetLineId) {
-      expenseData.budget_line_id = budgetLineId
-    }
-    const result = await createExpense(expenseData)
+
+    const result = isEditing
+      ? await updateExpense(expense.id, expenseData)
+      : await createExpense(expenseData)
 
     setLoading(false)
 
@@ -100,7 +130,7 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
       return
     }
 
-    toast.success('Despesa registrada!')
+    toast.success(isEditing ? 'Despesa atualizada!' : 'Despesa registrada!')
     router.push('/despesas')
   }
 
@@ -108,7 +138,7 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
     <Card>
       <form onSubmit={handleSubmit}>
         <CardHeader>
-          <CardTitle>Nova Despesa</CardTitle>
+          <CardTitle>{isEditing ? 'Editar Despesa' : 'Nova Despesa'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -129,21 +159,38 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
             </div>
             <div className="space-y-2">
               <Label>Área</Label>
-              <Select value={areaId} onValueChange={setAreaId}>
+              <Select value={areaId} onValueChange={setAreaId} disabled={!cardId || loadingAreas}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a área" />
+                  <SelectValue placeholder={
+                    !cardId
+                      ? 'Selecione o cartão primeiro'
+                      : loadingAreas
+                      ? 'Carregando áreas...'
+                      : 'Selecione a área'
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  {areas.filter((a) => a.is_active).map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: a.color }} />
-                        {a.name}
-                      </div>
+                  {filteredAreas.length === 0 ? (
+                    <SelectItem value="_empty" disabled>
+                      Nenhuma área alocada para este cartão
                     </SelectItem>
-                  ))}
+                  ) : (
+                    filteredAreas.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: a.color }} />
+                          {a.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              {cardId && !loadingAreas && filteredAreas.length === 0 && (
+                <p className="text-sm text-amber-600">
+                  Este cartão não possui alocações em nenhuma área. Crie um depósito com alocação primeiro.
+                </p>
+              )}
             </div>
           </div>
 
@@ -167,26 +214,33 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
             </div>
           )}
 
-          {/* Budget Line (Rubrica) - optional */}
-          {areaId && budgetLinesForArea.length > 0 && (
+          {/* Budget Line (Rubrica) - obrigatória */}
+          {areaId && (
             <div className="space-y-2">
-              <Label>Rubrica (opcional)</Label>
-              <Select value={budgetLineId || 'none'} onValueChange={(v) => setBudgetLineId(v === 'none' ? '' : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sem rubrica" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sem rubrica</SelectItem>
-                  {budgetLinesForArea.map((bl) => (
-                    <SelectItem key={bl.id} value={bl.id}>
-                      {bl.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {budgetLineId && budgetLineBalance !== null && (
-                <p className="text-sm text-muted-foreground">
-                  Saldo da rubrica: <span className="font-semibold">{formatCurrency(budgetLineBalance)}</span>
+              <Label>Rubrica</Label>
+              {budgetLinesForArea.length > 0 ? (
+                <>
+                  <Select value={budgetLineId} onValueChange={setBudgetLineId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a rubrica" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {budgetLinesForArea.map((bl) => (
+                        <SelectItem key={bl.id} value={bl.id}>
+                          {bl.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {budgetLineId && budgetLineBalance !== null && (
+                    <p className="text-sm text-muted-foreground">
+                      Saldo da rubrica: <span className="font-semibold">{formatCurrency(budgetLineBalance)}</span>
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-amber-600">
+                  Esta área não possui rubricas cadastradas. Crie uma rubrica na página da área primeiro.
                 </p>
               )}
             </div>
@@ -246,8 +300,8 @@ export function ExpenseForm({ cards, areas }: ExpenseFormProps) {
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading || exceedsBalance || !cardId || !areaId}>
-            {loading ? 'Salvando...' : 'Registrar Despesa'}
+          <Button type="submit" disabled={loading || exceedsBalance || !cardId || !areaId || !budgetLineId}>
+            {loading ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Registrar Despesa'}
           </Button>
         </CardFooter>
       </form>

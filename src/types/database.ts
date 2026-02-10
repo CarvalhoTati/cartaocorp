@@ -65,6 +65,9 @@ export interface BudgetLineBalance {
   is_active: boolean
   spent: number
   balance: number
+  accumulated_planned: number
+  accumulated_spent: number
+  accumulated_balance: number
 }
 
 export interface Expense {

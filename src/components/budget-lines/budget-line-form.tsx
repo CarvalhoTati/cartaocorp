@@ -10,15 +10,17 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createBudgetLine, updateBudgetLine } from '@/actions/budget-lines'
-import { getMonthOptions } from '@/lib/utils'
+import { formatCurrency, getMonthOptions } from '@/lib/utils'
 import type { BudgetLine } from '@/types/database'
 
 interface BudgetLineFormProps {
   areaId: string
   budgetLine?: BudgetLine
+  totalAllocated: number
+  alreadyPlanned: number
 }
 
-export function BudgetLineForm({ areaId, budgetLine }: BudgetLineFormProps) {
+export function BudgetLineForm({ areaId, budgetLine, totalAllocated, alreadyPlanned }: BudgetLineFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState(budgetLine?.name || '')
@@ -32,6 +34,9 @@ export function BudgetLineForm({ areaId, budgetLine }: BudgetLineFormProps) {
 
   const monthOptions = getMonthOptions()
   const isEdit = !!budgetLine
+  const parsedPlanned = parseFloat(plannedAmount) || 0
+  const availableForRubrica = totalAllocated - alreadyPlanned
+  const exceedsAllocation = parsedPlanned > availableForRubrica
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -88,6 +93,29 @@ export function BudgetLineForm({ areaId, budgetLine }: BudgetLineFormProps) {
               onChange={(e) => setPlannedAmount(e.target.value)}
               required
             />
+            <div className={`p-3 rounded-md text-sm ${
+              exceedsAllocation
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-muted text-muted-foreground'
+            }`}>
+              <div className="flex justify-between">
+                <span>Alocado na área:</span>
+                <span className="font-semibold">{formatCurrency(totalAllocated)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Já distribuído em rubricas:</span>
+                <span>{formatCurrency(alreadyPlanned)}</span>
+              </div>
+              <div className="flex justify-between border-t mt-1 pt-1">
+                <span>Disponível para esta rubrica:</span>
+                <span className={`font-semibold ${exceedsAllocation ? 'text-red-700' : ''}`}>
+                  {formatCurrency(availableForRubrica)}
+                </span>
+              </div>
+              {exceedsAllocation && (
+                <p className="mt-1 font-semibold">Valor excede o disponível!</p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -119,7 +147,7 @@ export function BudgetLineForm({ areaId, budgetLine }: BudgetLineFormProps) {
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || exceedsAllocation}>
             {loading ? 'Salvando...' : isEdit ? 'Atualizar' : 'Criar Rubrica'}
           </Button>
         </CardFooter>

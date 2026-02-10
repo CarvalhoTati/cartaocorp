@@ -4,8 +4,8 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { BudgetLineForm } from '@/components/budget-lines/budget-line-form'
-import { getArea } from '@/actions/areas'
-import { getBudgetLine } from '@/actions/budget-lines'
+import { getArea, getAreaCardBalances } from '@/actions/areas'
+import { getBudgetLine, getBudgetLinesTotalPlanned } from '@/actions/budget-lines'
 
 export default async function EditarRubricaPage({
   params,
@@ -22,6 +22,12 @@ export default async function EditarRubricaPage({
     notFound()
   }
 
+  const [cardBalances, alreadyPlanned] = await Promise.all([
+    getAreaCardBalances(id),
+    getBudgetLinesTotalPlanned(id, lineId),
+  ])
+  const totalAllocated = cardBalances.reduce((sum: number, cb: any) => sum + Number(cb.allocated), 0)
+
   return (
     <>
       <PageHeader
@@ -35,7 +41,12 @@ export default async function EditarRubricaPage({
           </Button>
         </Link>
       </PageHeader>
-      <BudgetLineForm areaId={id} budgetLine={budgetLine} />
+      <BudgetLineForm
+        areaId={id}
+        budgetLine={budgetLine}
+        totalAllocated={totalAllocated}
+        alreadyPlanned={alreadyPlanned}
+      />
     </>
   )
 }

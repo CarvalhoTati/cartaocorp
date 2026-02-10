@@ -48,6 +48,30 @@ export async function getAreaCardBalances(areaId: string) {
   return data
 }
 
+export async function getAreasForCard(cardId: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('v_area_card_balance')
+    .select('area_id, area_name, allocated, spent, balance')
+    .eq('card_id', cardId)
+    .gt('allocated', 0)
+
+  if (error) return []
+  // Fetch full area data for the matched area_ids
+  const areaIds = data.map((d: any) => d.area_id)
+  if (areaIds.length === 0) return []
+
+  const { data: areas, error: areasError } = await supabase
+    .from('areas')
+    .select('*')
+    .in('id', areaIds)
+    .eq('is_active', true)
+    .order('name')
+
+  if (areasError) return []
+  return areas
+}
+
 export async function createArea(formData: AreaFormData) {
   const parsed = areaSchema.safeParse(formData)
   if (!parsed.success) {

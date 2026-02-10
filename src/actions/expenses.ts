@@ -47,14 +47,12 @@ export async function createExpense(formData: ExpenseFormData) {
   const insertData: Record<string, unknown> = {
     card_id: parsed.data.card_id,
     area_id: parsed.data.area_id,
+    budget_line_id: parsed.data.budget_line_id,
     amount: parsed.data.amount,
     description: parsed.data.description,
     expense_date: parsed.data.expense_date,
     reference_month: parsed.data.reference_month,
     created_by: user.id,
-  }
-  if (parsed.data.budget_line_id) {
-    insertData.budget_line_id = parsed.data.budget_line_id
   }
 
   const { error } = await supabase
@@ -86,16 +84,74 @@ export async function deleteExpense(id: string) {
   return { success: true }
 }
 
+export async function getExpense(id: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('*, card:cards(name, last_four_digits), area:areas(name, color), budget_line:budget_lines(name)')
+    .eq('id', id)
+    .single()
+
+  if (error) {
+    // Fallback without budget_line join
+    const { data: fallback, error: fallbackError } = await supabase
+      .from('expenses')
+      .select('*, card:cards(name, last_four_digits), area:areas(name, color)')
+      .eq('id', id)
+      .single()
+
+    if (fallbackError) return null
+    return fallback
+  }
+
+  return data
+}
+
+export async function updateExpense(id: string, formData: ExpenseFormData) {
+  const parsed = expenseSchema.safeParse(formData)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message }
+  }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const updateData: Record<string, unknown> = {
+    card_id: parsed.data.card_id,
+    area_id: parsed.data.area_id,
+    amount: parsed.data.amount,
+    description: parsed.data.description,
+    expense_date: parsed.data.expense_date,
+    reference_month: parsed.data.reference_month,
+    budget_line_id: parsed.data.budget_line_id || null,
+  }
+
+  const { error } = await supabase
+    .from('expenses')
+    .update(updateData)
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/despesas')
+  revalidatePath('/cartoes')
+  revalidatePath('/areas')
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
 export async function getBudgetLineBalance(budgetLineId: string) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('v_budget_line_balance')
-    .select('balance')
+    .select('accumulated_balance')
     .eq('id', budgetLineId)
     .single()
 
   if (error) return 0
-  return Number(data?.balance) || 0
+  return Number(data?.accumulated_balance) || 0
 }
 
 export async function getAvailableBalance(cardId: string, areaId: string) {

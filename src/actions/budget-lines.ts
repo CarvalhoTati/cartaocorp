@@ -45,6 +45,23 @@ export async function getBudgetLineBalances(areaId: string, referenceMonth?: str
   return data
 }
 
+export async function getBudgetLinesTotalPlanned(areaId: string, excludeId?: string) {
+  const supabase = await createClient()
+  let query = supabase
+    .from('budget_lines')
+    .select('planned_amount')
+    .eq('area_id', areaId)
+    .eq('is_active', true)
+
+  if (excludeId) {
+    query = query.neq('id', excludeId)
+  }
+
+  const { data, error } = await query
+  if (error) return 0
+  return data.reduce((sum, bl) => sum + Number(bl.planned_amount), 0)
+}
+
 export async function createBudgetLine(formData: BudgetLineFormData) {
   const parsed = budgetLineSchema.safeParse(formData)
   if (!parsed.success) {

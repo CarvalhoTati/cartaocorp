@@ -35,7 +35,7 @@ export const budgetLineSchema = z.object({
 export const expenseSchema = z.object({
   card_id: z.string().uuid('Selecione um cartão'),
   area_id: z.string().uuid('Selecione uma área'),
-  budget_line_id: z.string().uuid().optional(),
+  budget_line_id: z.string().uuid('Selecione uma rubrica'),
   amount: z.number().positive('Valor deve ser positivo'),
   description: z.string().min(1, 'Descrição é obrigatória'),
   expense_date: z.string().min(1, 'Data é obrigatória'),
