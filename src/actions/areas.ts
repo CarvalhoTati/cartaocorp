@@ -50,14 +50,33 @@ export async function getAreaCardBalances(areaId: string) {
 
 export async function getAreasForCard(cardId: string) {
   const supabase = await createClient()
+
+  // Use card_areas mapping as primary source
+  const { data: mapping, error: mapError } = await supabase
+    .from('card_areas')
+    .select('area_id')
+    .eq('card_id', cardId)
+
+  if (!mapError && mapping && mapping.length > 0) {
+    const areaIds = mapping.map((d) => d.area_id)
+    const { data: areas, error: areasError } = await supabase
+      .from('areas')
+      .select('*')
+      .in('id', areaIds)
+      .eq('is_active', true)
+      .order('name')
+
+    if (!areasError && areas) return areas
+  }
+
+  // Fallback: if no mapping defined, return areas with existing allocations
   const { data, error } = await supabase
     .from('v_area_card_balance')
-    .select('area_id, area_name, allocated, spent, balance')
+    .select('area_id')
     .eq('card_id', cardId)
     .gt('allocated', 0)
 
   if (error) return []
-  // Fetch full area data for the matched area_ids
   const areaIds = data.map((d: any) => d.area_id)
   if (areaIds.length === 0) return []
 

@@ -85,6 +85,43 @@ export async function updateCard(id: string, formData: CardFormData) {
   return { success: true }
 }
 
+export async function getCardAreaIds(cardId: string) {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('card_areas')
+    .select('area_id')
+    .eq('card_id', cardId)
+
+  if (error) return []
+  return data.map((d) => d.area_id)
+}
+
+export async function setCardAreas(cardId: string, areaIds: string[]) {
+  const supabase = await createClient()
+
+  // Delete existing mappings
+  const { error: delError } = await supabase
+    .from('card_areas')
+    .delete()
+    .eq('card_id', cardId)
+
+  if (delError) return { error: delError.message }
+
+  // Insert new mappings
+  if (areaIds.length > 0) {
+    const rows = areaIds.map((area_id) => ({ card_id: cardId, area_id }))
+    const { error: insError } = await supabase
+      .from('card_areas')
+      .insert(rows)
+
+    if (insError) return { error: insError.message }
+  }
+
+  revalidatePath('/cartoes')
+  revalidatePath(`/cartoes/${cardId}`)
+  return { success: true }
+}
+
 export async function toggleCardActive(id: string, isActive: boolean) {
   const supabase = await createClient()
   const { error } = await supabase

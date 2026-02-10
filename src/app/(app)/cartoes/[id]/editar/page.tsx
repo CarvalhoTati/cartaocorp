@@ -4,7 +4,8 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { CardForm } from '@/components/cards/card-form'
-import { getCard } from '@/actions/cards'
+import { getCard, getCardAreaIds } from '@/actions/cards'
+import { getAreas } from '@/actions/areas'
 
 export default async function EditCardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -16,6 +17,11 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
     notFound()
   }
 
+  const [areas, linkedAreaIds] = await Promise.all([
+    getAreas(),
+    getCardAreaIds(id),
+  ])
+
   return (
     <>
       <PageHeader title="Editar Cartão" description={`${card.name} • ${card.bank}`}>
@@ -26,7 +32,7 @@ export default async function EditCardPage({ params }: { params: Promise<{ id: s
           </Button>
         </Link>
       </PageHeader>
-      <CardForm card={card} />
+      <CardForm card={card} areas={areas} linkedAreaIds={linkedAreaIds} />
     </>
   )
 }

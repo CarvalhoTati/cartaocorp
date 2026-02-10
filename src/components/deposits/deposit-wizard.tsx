@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react'
 import { createDepositWithAllocations, updateDepositWithAllocations } from '@/actions/deposits'
+import { getAreasForCard } from '@/actions/areas'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
 import type { Card as CardType, Area } from '@/types/database'
 
@@ -60,7 +61,28 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
     return {}
   })
 
-  const activeAreas = areas.filter((a) => a.is_active)
+  const allActiveAreas = areas.filter((a) => a.is_active)
+  const [filteredAreas, setFilteredAreas] = useState<Area[]>(allActiveAreas)
+  const [loadingAreas, setLoadingAreas] = useState(false)
+  const isFirstCardChange = useRef(true)
+
+  useEffect(() => {
+    if (!cardId) {
+      setFilteredAreas(allActiveAreas)
+      return
+    }
+    setLoadingAreas(true)
+    getAreasForCard(cardId).then((areas) => {
+      setFilteredAreas(areas.length > 0 ? areas : allActiveAreas)
+      setLoadingAreas(false)
+      if (isFirstCardChange.current) {
+        isFirstCardChange.current = false
+      } else {
+        setAllocations({})
+      }
+    })
+  }, [cardId])
+
   const parsedAmount = parseFloat(amount) || 0
   const monthOptions = getMonthOptions(24)
 
@@ -83,11 +105,11 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
   }
 
   function distributeEvenly() {
-    if (activeAreas.length === 0) return
-    const perArea = Math.floor((parsedAmount / activeAreas.length) * 100) / 100
-    const diff = parsedAmount - perArea * activeAreas.length
+    if (filteredAreas.length === 0) return
+    const perArea = Math.floor((parsedAmount / filteredAreas.length) * 100) / 100
+    const diff = parsedAmount - perArea * filteredAreas.length
     const newAlloc: Record<string, string> = {}
-    activeAreas.forEach((a, i) => {
+    filteredAreas.forEach((a, i) => {
       const val = i === 0 ? perArea + Math.round(diff * 100) / 100 : perArea
       newAlloc[a.id] = val.toFixed(2)
     })
@@ -111,7 +133,7 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
       amount: parsedAmount,
       reference_month: referenceMonth,
       description: description || undefined,
-      allocations: activeAreas
+      allocations: filteredAreas
         .filter((a) => parseFloat(allocations[a.id] || '0') > 0)
         .map((a) => ({
           area_id: a.id,
@@ -221,7 +243,7 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
             </div>
 
             <div className="space-y-3">
-              {activeAreas.map((area) => (
+              {filteredAreas.map((area) => (
                 <div key={area.id} className="flex items-center gap-3">
                   <div
                     className="w-4 h-4 rounded-full shrink-0"
