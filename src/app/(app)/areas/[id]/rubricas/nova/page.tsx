@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { BudgetLineForm } from '@/components/budget-lines/budget-line-form'
 import { getArea, getAreaCardBalances } from '@/actions/areas'
-import { getBudgetLinesTotalPlanned } from '@/actions/budget-lines'
+import { getBudgetLinesTotalPlanned, getDistinctBudgetLineNames } from '@/actions/budget-lines'
 
 export default async function NovaRubricaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -17,9 +17,10 @@ export default async function NovaRubricaPage({ params }: { params: Promise<{ id
     notFound()
   }
 
-  const [cardBalances, alreadyPlanned] = await Promise.all([
+  const [cardBalances, alreadyPlanned, existingNames] = await Promise.all([
     getAreaCardBalances(id),
     getBudgetLinesTotalPlanned(id),
+    getDistinctBudgetLineNames(),
   ])
   const totalAllocated = cardBalances.reduce((sum: number, cb: any) => sum + Number(cb.allocated), 0)
 
@@ -40,6 +41,7 @@ export default async function NovaRubricaPage({ params }: { params: Promise<{ id
         areaId={id}
         totalAllocated={totalAllocated}
         alreadyPlanned={alreadyPlanned}
+        existingNames={existingNames}
       />
     </>
   )

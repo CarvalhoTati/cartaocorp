@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { BudgetLineForm } from '@/components/budget-lines/budget-line-form'
 import { getArea, getAreaCardBalances } from '@/actions/areas'
-import { getBudgetLine, getBudgetLinesTotalPlanned } from '@/actions/budget-lines'
+import { getBudgetLine, getBudgetLinesTotalPlanned, getDistinctBudgetLineNames } from '@/actions/budget-lines'
 
 export default async function EditarRubricaPage({
   params,
@@ -22,9 +22,10 @@ export default async function EditarRubricaPage({
     notFound()
   }
 
-  const [cardBalances, alreadyPlanned] = await Promise.all([
+  const [cardBalances, alreadyPlanned, existingNames] = await Promise.all([
     getAreaCardBalances(id),
     getBudgetLinesTotalPlanned(id, lineId),
+    getDistinctBudgetLineNames(),
   ])
   const totalAllocated = cardBalances.reduce((sum: number, cb: any) => sum + Number(cb.allocated), 0)
 
@@ -46,6 +47,7 @@ export default async function EditarRubricaPage({
         budgetLine={budgetLine}
         totalAllocated={totalAllocated}
         alreadyPlanned={alreadyPlanned}
+        existingNames={existingNames}
       />
     </>
   )

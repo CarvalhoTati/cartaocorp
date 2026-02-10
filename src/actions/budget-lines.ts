@@ -45,6 +45,19 @@ export async function getBudgetLineBalances(areaId: string, referenceMonth?: str
   return data
 }
 
+export async function getDistinctBudgetLineNames() {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('budget_lines')
+    .select('name')
+    .eq('is_active', true)
+    .order('name')
+
+  if (error) return []
+  const unique = [...new Set(data.map((d) => d.name))]
+  return unique
+}
+
 export async function getBudgetLinesTotalPlanned(areaId: string, excludeId?: string) {
   const supabase = await createClient()
   let query = supabase

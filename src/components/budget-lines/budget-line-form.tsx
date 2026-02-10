@@ -13,17 +13,26 @@ import { createBudgetLine, updateBudgetLine } from '@/actions/budget-lines'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
 import type { BudgetLine } from '@/types/database'
 
+const OTHER_VALUE = '__other__'
+
 interface BudgetLineFormProps {
   areaId: string
   budgetLine?: BudgetLine
   totalAllocated: number
   alreadyPlanned: number
+  existingNames: string[]
 }
 
-export function BudgetLineForm({ areaId, budgetLine, totalAllocated, alreadyPlanned }: BudgetLineFormProps) {
+export function BudgetLineForm({ areaId, budgetLine, totalAllocated, alreadyPlanned, existingNames }: BudgetLineFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState(budgetLine?.name || '')
+  const [isCustomName, setIsCustomName] = useState(
+    !!budgetLine && !existingNames.includes(budgetLine.name)
+  )
+  const [selectedName, setSelectedName] = useState(
+    budgetLine && existingNames.includes(budgetLine.name) ? budgetLine.name : existingNames.length > 0 ? '' : OTHER_VALUE
+  )
   const [plannedAmount, setPlannedAmount] = useState(
     budgetLine ? String(budgetLine.planned_amount) : ''
   )
@@ -74,12 +83,53 @@ export function BudgetLineForm({ areaId, budgetLine, totalAllocated, alreadyPlan
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Nome</Label>
-            <Input
-              placeholder="Ex: Almoço, Brinde, Treinamento..."
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
+            {existingNames.length > 0 && !isEdit ? (
+              <>
+                <Select
+                  value={selectedName}
+                  onValueChange={(v) => {
+                    setSelectedName(v)
+                    if (v === OTHER_VALUE) {
+                      setIsCustomName(true)
+                      setName('')
+                    } else {
+                      setIsCustomName(false)
+                      setName(v)
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a rubrica" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {existingNames.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={OTHER_VALUE}>
+                      Outro (digitar nome)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {isCustomName && (
+                  <Input
+                    placeholder="Digite o nome da nova rubrica..."
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                )}
+              </>
+            ) : (
+              <Input
+                placeholder="Ex: Almoço, Brinde, Treinamento..."
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            )}
           </div>
 
           <div className="space-y-2">
@@ -147,7 +197,7 @@ export function BudgetLineForm({ areaId, budgetLine, totalAllocated, alreadyPlan
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading || exceedsAllocation}>
+          <Button type="submit" disabled={loading || exceedsAllocation || !name.trim()}>
             {loading ? 'Salvando...' : isEdit ? 'Atualizar' : 'Criar Rubrica'}
           </Button>
         </CardFooter>
