@@ -1,0 +1,46 @@
+# Mapeamento de Dependencias do Projeto
+# Execute /check-dependencies para verificar consistencia
+
+name: "cartaocorp"
+description: "Correlacoes entre arquivos do CartaoCorp"
+last_check: "2026-02-09"
+
+correlations:
+  # Versao consistente entre arquivos
+  - primary: package.json
+    related: [docs/README.md]
+    sync: "Versao e stack do projeto"
+    check: "version"
+
+  # Scripts documentados
+  - primary: package.json
+    related: [docs/CONTRIBUTING.md]
+    sync: "Scripts disponiveis (npm run X)"
+    check: "manual"
+    note: "Ao adicionar/remover scripts, atualizar CONTRIBUTING.md"
+
+  # Variaveis de ambiente documentadas
+  - primary: .env.local
+    related: [docs/CONTRIBUTING.md]
+    sync: "Variaveis de ambiente necessarias"
+    check: "manual"
+    note: "Criar .env.example quando possivel"
+
+  # Migrations e schema
+  - primary: supabase/migrations/
+    related: [src/types/database.ts]
+    sync: "Schema do banco refletido nos tipos"
+    check: "manual"
+    note: "Ao rodar nova migration, atualizar types/database.ts"
+
+  # Server actions e rotas
+  - primary: src/actions/
+    related: [docs/RUNBOOK.md]
+    sync: "Operacoes documentadas"
+    check: "manual"
+
+  # Deploy
+  - primary: next.config.ts
+    related: [docs/RUNBOOK.md]
+    sync: "Configuracao de deploy"
+    check: "manual"
