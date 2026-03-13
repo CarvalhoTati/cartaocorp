@@ -3,15 +3,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { createExpense, updateExpense, getAvailableBalance, getBudgetLineBalance } from '@/actions/expenses'
 import { getAreasForCard } from '@/actions/areas'
-import { getBudgetLines } from '@/actions/budget-lines'
+import { getBudgetLines, getDistinctBudgetLineNames, createBudgetLine } from '@/actions/budget-lines'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
 import type { Card as CardType, Area, BudgetLine, Expense } from '@/types/database'
 
@@ -38,6 +40,16 @@ export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProp
   const [budgetLineBalance, setBudgetLineBalance] = useState<number | null>(null)
   const [availableBalance, setAvailableBalance] = useState<number | null>(null)
   const [loadingBalance, setLoadingBalance] = useState(false)
+
+  // Dialog para criar rubrica inline
+  const [showNewBudgetLine, setShowNewBudgetLine] = useState(false)
+  const [newBLName, setNewBLName] = useState('')
+  const [newBLCustomName, setNewBLCustomName] = useState('')
+  const [newBLIsCustom, setNewBLIsCustom] = useState(false)
+  const [newBLPlannedAmount, setNewBLPlannedAmount] = useState('')
+  const [newBLDescription, setNewBLDescription] = useState('')
+  const [existingBLNames, setExistingBLNames] = useState<string[]>([])
+  const [savingBL, setSavingBL] = useState(false)
 
   const monthOptions = getMonthOptions()
   const parsedAmount = parseFloat(amount) || 0
@@ -101,6 +113,54 @@ export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProp
     }
   }, [cardId, areaId])
 
+  async function handleOpenNewBudgetLine() {
+    const names = await getDistinctBudgetLineNames()
+    setExistingBLNames(names)
+    setNewBLName('')
+    setNewBLCustomName('')
+    setNewBLIsCustom(false)
+    setNewBLPlannedAmount('')
+    setNewBLDescription('')
+    setShowNewBudgetLine(true)
+  }
+
+  async function handleSaveNewBudgetLine() {
+    const finalName = newBLIsCustom ? newBLCustomName.trim() : newBLName
+    if (!finalName) {
+      toast.error('Informe o nome da rubrica')
+      return
+    }
+    const planned = parseFloat(newBLPlannedAmount)
+    if (!planned || planned <= 0) {
+      toast.error('Informe um valor planejado válido')
+      return
+    }
+
+    setSavingBL(true)
+    const result = await createBudgetLine({
+      area_id: areaId,
+      name: finalName,
+      planned_amount: planned,
+      reference_month: referenceMonth,
+      description: newBLDescription || undefined,
+    })
+    setSavingBL(false)
+
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+
+    toast.success('Rubrica criada!')
+    setShowNewBudgetLine(false)
+
+    // Recarregar rubricas da área e selecionar a nova
+    const updatedLines = await getBudgetLines(areaId)
+    setBudgetLinesForArea(updatedLines)
+    const created = updatedLines.find((bl) => bl.name === finalName)
+    if (created) setBudgetLineId(created.id)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (exceedsBalance) {
@@ -135,6 +195,7 @@ export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProp
   }
 
   return (
+    <>
     <Card>
       <form onSubmit={handleSubmit}>
         <CardHeader>
@@ -217,7 +278,18 @@ export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProp
           {/* Budget Line (Rubrica) - obrigatória */}
           {areaId && (
             <div className="space-y-2">
-              <Label>Rubrica</Label>
+              <div className="flex items-center justify-between">
+                <Label>Rubrica</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenNewBudgetLine}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Nova Rubrica
+                </Button>
+              </div>
               {budgetLinesForArea.length > 0 ? (
                 <>
                   <Select value={budgetLineId} onValueChange={setBudgetLineId}>
@@ -240,7 +312,7 @@ export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProp
                 </>
               ) : (
                 <p className="text-sm text-amber-600">
-                  Esta área não possui rubricas cadastradas. Crie uma rubrica na página da área primeiro.
+                  Esta área não possui rubricas cadastradas. Use o botão acima para criar uma.
                 </p>
               )}
             </div>
@@ -306,5 +378,97 @@ export function ExpenseForm({ cards, areas: allAreas, expense }: ExpenseFormProp
         </CardFooter>
       </form>
     </Card>
+
+    {/* Dialog para criar rubrica inline */}
+    <Dialog open={showNewBudgetLine} onOpenChange={setShowNewBudgetLine}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nova Rubrica</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Nome</Label>
+            {existingBLNames.length > 0 ? (
+              <>
+                <Select
+                  value={newBLIsCustom ? '__other__' : newBLName}
+                  onValueChange={(v) => {
+                    if (v === '__other__') {
+                      setNewBLIsCustom(true)
+                      setNewBLName('')
+                    } else {
+                      setNewBLIsCustom(false)
+                      setNewBLName(v)
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione ou crie nova" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {existingBLNames.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                    <SelectItem value="__other__">Outro (digitar nome)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {newBLIsCustom && (
+                  <Input
+                    placeholder="Digite o nome da nova rubrica..."
+                    value={newBLCustomName}
+                    onChange={(e) => setNewBLCustomName(e.target.value)}
+                    autoFocus
+                  />
+                )}
+              </>
+            ) : (
+              <Input
+                placeholder="Ex: Almoço, Brinde, Treinamento..."
+                value={newBLCustomName}
+                onChange={(e) => {
+                  setNewBLCustomName(e.target.value)
+                  setNewBLIsCustom(true)
+                }}
+                autoFocus
+              />
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Valor Planejado (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="500.00"
+              value={newBLPlannedAmount}
+              onChange={(e) => setNewBLPlannedAmount(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Descrição (opcional)</Label>
+            <Textarea
+              placeholder="Detalhes sobre esta rubrica..."
+              value={newBLDescription}
+              onChange={(e) => setNewBLDescription(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setShowNewBudgetLine(false)}>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSaveNewBudgetLine}
+            disabled={savingBL || (newBLIsCustom ? !newBLCustomName.trim() : !newBLName)}
+          >
+            {savingBL ? 'Salvando...' : 'Criar Rubrica'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
