@@ -6,14 +6,17 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { ArrowRight, ArrowLeft, Check } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Check, Plus } from 'lucide-react'
 import { createDepositWithAllocations, updateDepositWithAllocations } from '@/actions/deposits'
 import { getAreasForCard } from '@/actions/areas'
+import { getBudgetLines, getDistinctBudgetLineNames, createBudgetLine } from '@/actions/budget-lines'
 import { formatCurrency, getMonthOptions } from '@/lib/utils'
-import type { Card as CardType, Area } from '@/types/database'
+import type { Card as CardType, Area, BudgetLine } from '@/types/database'
 
 interface DepositData {
   id: string
@@ -21,13 +24,23 @@ interface DepositData {
   amount: number
   reference_month: string
   description: string | null
-  allocations?: { id: string; area_id: string; amount: number }[]
+  allocations?: { id: string; area_id: string; budget_line_id: string | null; amount: number }[]
 }
 
 interface DepositWizardProps {
   cards: CardType[]
   areas: Area[]
   deposit?: DepositData
+}
+
+// Key for allocation amounts: "areaId::budgetLineId"
+type AllocKey = string
+function makeKey(areaId: string, blId: string): AllocKey {
+  return `${areaId}::${blId}`
+}
+function parseKey(key: AllocKey): { areaId: string; blId: string } {
+  const [areaId, blId] = key.split('::')
+  return { areaId, blId }
 }
 
 export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
@@ -41,7 +54,6 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
   const [amount, setAmount] = useState(deposit ? String(deposit.amount) : '')
   const [referenceMonth, setReferenceMonth] = useState(() => {
     if (deposit?.reference_month) {
-      // Normalize to YYYY-MM-01 format
       const d = new Date(deposit.reference_month)
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
     }
@@ -49,12 +61,14 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
   })
   const [description, setDescription] = useState(deposit?.description || '')
 
-  // Step 2 fields - pre-fill from existing allocations
-  const [allocations, setAllocations] = useState<Record<string, string>>(() => {
+  // Step 2 fields
+  const [allocations, setAllocations] = useState<Record<AllocKey, string>>(() => {
     if (deposit?.allocations) {
-      const alloc: Record<string, string> = {}
+      const alloc: Record<AllocKey, string> = {}
       deposit.allocations.forEach((a) => {
-        alloc[a.area_id] = String(a.amount)
+        if (a.budget_line_id) {
+          alloc[makeKey(a.area_id, a.budget_line_id)] = String(a.amount)
+        }
       })
       return alloc
     }
@@ -64,8 +78,22 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
   const allActiveAreas = areas.filter((a) => a.is_active)
   const [filteredAreas, setFilteredAreas] = useState<Area[]>(allActiveAreas)
   const [loadingAreas, setLoadingAreas] = useState(false)
+  const [budgetLinesByArea, setBudgetLinesByArea] = useState<Record<string, BudgetLine[]>>({})
+  const [loadingBudgetLines, setLoadingBudgetLines] = useState(false)
   const isFirstCardChange = useRef(true)
 
+  // Dialog para criar rubrica inline
+  const [showNewBudgetLine, setShowNewBudgetLine] = useState(false)
+  const [newBLAreaId, setNewBLAreaId] = useState('')
+  const [newBLName, setNewBLName] = useState('')
+  const [newBLCustomName, setNewBLCustomName] = useState('')
+  const [newBLIsCustom, setNewBLIsCustom] = useState(false)
+  const [newBLPlannedAmount, setNewBLPlannedAmount] = useState('')
+  const [newBLDescription, setNewBLDescription] = useState('')
+  const [existingBLNames, setExistingBLNames] = useState<string[]>([])
+  const [savingBL, setSavingBL] = useState(false)
+
+  // Load areas when card changes
   useEffect(() => {
     if (!cardId) {
       setFilteredAreas(allActiveAreas)
@@ -79,9 +107,28 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
         isFirstCardChange.current = false
       } else {
         setAllocations({})
+        setBudgetLinesByArea({})
       }
     })
   }, [cardId])
+
+  // Load budget lines for all filtered areas when entering step 2
+  useEffect(() => {
+    if (step !== 2 || filteredAreas.length === 0) return
+    setLoadingBudgetLines(true)
+    Promise.all(
+      filteredAreas.map((area) =>
+        getBudgetLines(area.id).then((lines) => ({ areaId: area.id, lines }))
+      )
+    ).then((results) => {
+      const map: Record<string, BudgetLine[]> = {}
+      results.forEach(({ areaId, lines }) => {
+        map[areaId] = lines
+      })
+      setBudgetLinesByArea(map)
+      setLoadingBudgetLines(false)
+    })
+  }, [step, filteredAreas])
 
   const parsedAmount = parseFloat(amount) || 0
   const monthOptions = getMonthOptions(24)
@@ -100,29 +147,82 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
   )
   const remaining = parsedAmount - allocTotal
 
-  function handleAllocationChange(areaId: string, value: string) {
-    setAllocations((prev) => ({ ...prev, [areaId]: value }))
+  function handleAllocationChange(key: AllocKey, value: string) {
+    setAllocations((prev) => ({ ...prev, [key]: value }))
   }
 
-  function distributeEvenly() {
-    if (filteredAreas.length === 0) return
-    const perArea = Math.floor((parsedAmount / filteredAreas.length) * 100) / 100
-    const diff = parsedAmount - perArea * filteredAreas.length
-    const newAlloc: Record<string, string> = {}
-    filteredAreas.forEach((a, i) => {
-      const val = i === 0 ? perArea + Math.round(diff * 100) / 100 : perArea
-      newAlloc[a.id] = val.toFixed(2)
-    })
-    setAllocations(newAlloc)
+  // Get total allocated per area
+  function getAreaTotal(areaId: string): number {
+    return Object.entries(allocations).reduce((sum, [key, val]) => {
+      const { areaId: kAreaId } = parseKey(key)
+      if (kAreaId === areaId) return sum + (parseFloat(val) || 0)
+      return sum
+    }, 0)
   }
 
   function canProceed() {
     return cardId && parsedAmount > 0 && referenceMonth
   }
 
+  async function handleOpenNewBudgetLine(areaId: string) {
+    const names = await getDistinctBudgetLineNames()
+    setExistingBLNames(names)
+    setNewBLAreaId(areaId)
+    setNewBLName('')
+    setNewBLCustomName('')
+    setNewBLIsCustom(false)
+    setNewBLPlannedAmount('')
+    setNewBLDescription('')
+    setShowNewBudgetLine(true)
+  }
+
+  async function handleSaveNewBudgetLine() {
+    const finalName = newBLIsCustom ? newBLCustomName.trim() : newBLName
+    if (!finalName) {
+      toast.error('Informe o nome da rubrica')
+      return
+    }
+    const planned = parseFloat(newBLPlannedAmount)
+    if (!planned || planned <= 0) {
+      toast.error('Informe um valor planejado válido')
+      return
+    }
+
+    setSavingBL(true)
+    const result = await createBudgetLine({
+      area_id: newBLAreaId,
+      name: finalName,
+      planned_amount: planned,
+      reference_month: referenceMonth,
+      description: newBLDescription || undefined,
+    })
+    setSavingBL(false)
+
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+
+    toast.success('Rubrica criada!')
+    setShowNewBudgetLine(false)
+
+    // Reload budget lines for this area
+    const updatedLines = await getBudgetLines(newBLAreaId)
+    setBudgetLinesByArea((prev) => ({ ...prev, [newBLAreaId]: updatedLines }))
+  }
+
   async function handleSubmit() {
     if (Math.abs(remaining) > 0.01) {
       toast.error('A soma das alocações deve ser igual ao valor do depósito')
+      return
+    }
+
+    // Check that all allocations have a budget line
+    const entries = Object.entries(allocations).filter(
+      ([, val]) => parseFloat(val) > 0
+    )
+    if (entries.length === 0) {
+      toast.error('Informe pelo menos uma alocação')
       return
     }
 
@@ -133,12 +233,14 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
       amount: parsedAmount,
       reference_month: referenceMonth,
       description: description || undefined,
-      allocations: filteredAreas
-        .filter((a) => parseFloat(allocations[a.id] || '0') > 0)
-        .map((a) => ({
-          area_id: a.id,
-          amount: parseFloat(allocations[a.id] || '0'),
-        })),
+      allocations: entries.map(([key, val]) => {
+        const { areaId, blId } = parseKey(key)
+        return {
+          area_id: areaId,
+          budget_line_id: blId,
+          amount: parseFloat(val),
+        }
+      }),
     }
 
     const result = isEditing
@@ -156,21 +258,27 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
     router.push('/depositos')
   }
 
+  // Check if any area has no budget lines
+  const areasWithoutBudgetLines = filteredAreas.filter(
+    (area) => (budgetLinesByArea[area.id] || []).length === 0
+  )
+
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2 mb-2">
           <Badge variant={step === 1 ? 'default' : 'outline'}>1. Depósito</Badge>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          <Badge variant={step === 2 ? 'default' : 'outline'}>2. Alocação</Badge>
+          <Badge variant={step === 2 ? 'default' : 'outline'}>2. Alocação por Rubrica</Badge>
         </div>
         <CardTitle>
-          {step === 1 ? 'Dados do Depósito' : 'Distribuir por Áreas'}
+          {step === 1 ? 'Dados do Depósito' : 'Distribuir por Rubricas'}
         </CardTitle>
         <CardDescription>
           {step === 1
             ? 'Informe o cartão, valor e mês de referência'
-            : 'Distribua o valor entre as áreas. A soma deve bater com o depósito.'}
+            : 'Distribua o valor entre as rubricas de cada área. A soma deve bater com o depósito.'}
         </CardDescription>
       </CardHeader>
 
@@ -236,32 +344,70 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
               <span className="font-bold">{formatCurrency(parsedAmount)}</span>
             </div>
 
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={distributeEvenly}>
-                Distribuir igualmente
-              </Button>
-            </div>
+            {loadingBudgetLines ? (
+              <p className="text-sm text-muted-foreground">Carregando rubricas...</p>
+            ) : (
+              <div className="space-y-6">
+                {filteredAreas.map((area) => {
+                  const lines = budgetLinesByArea[area.id] || []
+                  const areaTotal = getAreaTotal(area.id)
 
-            <div className="space-y-3">
-              {filteredAreas.map((area) => (
-                <div key={area.id} className="flex items-center gap-3">
-                  <div
-                    className="w-4 h-4 rounded-full shrink-0"
-                    style={{ backgroundColor: area.color }}
-                  />
-                  <Label className="w-32 shrink-0">{area.name}</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={allocations[area.id] || ''}
-                    onChange={(e) => handleAllocationChange(area.id, e.target.value)}
-                    className="w-40"
-                  />
-                </div>
-              ))}
-            </div>
+                  return (
+                    <div key={area.id} className="rounded-lg border p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-4 h-4 rounded-full shrink-0"
+                            style={{ backgroundColor: area.color }}
+                          />
+                          <span className="font-medium">{area.name}</span>
+                          {areaTotal > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              {formatCurrency(areaTotal)}
+                            </Badge>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenNewBudgetLine(area.id)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Nova Rubrica
+                        </Button>
+                      </div>
+
+                      {lines.length > 0 ? (
+                        <div className="space-y-2 pl-6">
+                          {lines.map((bl) => {
+                            const key = makeKey(area.id, bl.id)
+                            return (
+                              <div key={bl.id} className="flex items-center gap-3">
+                                <Label className="w-40 shrink-0 text-sm">{bl.name}</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="0.00"
+                                  value={allocations[key] || ''}
+                                  onChange={(e) => handleAllocationChange(key, e.target.value)}
+                                  className="w-40"
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-amber-600 pl-6">
+                          Esta área não possui rubricas cadastradas. Use o botão acima para criar uma.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             <div className={`flex items-center justify-between p-3 rounded-md ${
               Math.abs(remaining) < 0.01
@@ -312,5 +458,97 @@ export function DepositWizard({ cards, areas, deposit }: DepositWizardProps) {
         )}
       </CardFooter>
     </Card>
+
+    {/* Dialog para criar rubrica inline */}
+    <Dialog open={showNewBudgetLine} onOpenChange={setShowNewBudgetLine}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nova Rubrica</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Nome</Label>
+            {existingBLNames.length > 0 ? (
+              <>
+                <Select
+                  value={newBLIsCustom ? '__other__' : newBLName}
+                  onValueChange={(v) => {
+                    if (v === '__other__') {
+                      setNewBLIsCustom(true)
+                      setNewBLName('')
+                    } else {
+                      setNewBLIsCustom(false)
+                      setNewBLName(v)
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione ou crie nova" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {existingBLNames.map((n) => (
+                      <SelectItem key={n} value={n}>{n}</SelectItem>
+                    ))}
+                    <SelectItem value="__other__">Outro (digitar nome)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {newBLIsCustom && (
+                  <Input
+                    placeholder="Digite o nome da nova rubrica..."
+                    value={newBLCustomName}
+                    onChange={(e) => setNewBLCustomName(e.target.value)}
+                    autoFocus
+                  />
+                )}
+              </>
+            ) : (
+              <Input
+                placeholder="Ex: Almoço, Brinde, Treinamento..."
+                value={newBLCustomName}
+                onChange={(e) => {
+                  setNewBLCustomName(e.target.value)
+                  setNewBLIsCustom(true)
+                }}
+                autoFocus
+              />
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Valor Planejado (R$)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="500.00"
+              value={newBLPlannedAmount}
+              onChange={(e) => setNewBLPlannedAmount(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Descrição (opcional)</Label>
+            <Textarea
+              placeholder="Detalhes sobre esta rubrica..."
+              value={newBLDescription}
+              onChange={(e) => setNewBLDescription(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setShowNewBudgetLine(false)}>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSaveNewBudgetLine}
+            disabled={savingBL || (newBLIsCustom ? !newBLCustomName.trim() : !newBLName)}
+          >
+            {savingBL ? 'Salvando...' : 'Criar Rubrica'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

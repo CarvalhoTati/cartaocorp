@@ -39,8 +39,10 @@ export interface Allocation {
   id: string
   deposit_id: string
   area_id: string
+  budget_line_id: string | null
   amount: number
   area?: Area
+  budget_line?: BudgetLine
 }
 
 export interface BudgetLine {

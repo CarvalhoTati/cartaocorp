@@ -7,7 +7,7 @@ export async function getDeposits() {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('deposits')
-    .select('*, card:cards(name, last_four_digits, bank), allocations(*, area:areas(name, color))')
+    .select('*, card:cards(name, last_four_digits, bank), allocations(*, area:areas(name, color), budget_line:budget_lines(id, name))')
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
@@ -18,7 +18,7 @@ export async function getDeposit(id: string) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('deposits')
-    .select('*, card:cards(name, last_four_digits, bank), allocations(*, area:areas(name, color))')
+    .select('*, card:cards(name, last_four_digits, bank), allocations(*, area:areas(name, color), budget_line:budget_lines(id, name))')
     .eq('id', id)
     .single()
 
@@ -31,7 +31,7 @@ export async function createDepositWithAllocations(input: {
   amount: number
   reference_month: string
   description?: string
-  allocations: { area_id: string; amount: number }[]
+  allocations: { area_id: string; budget_line_id: string; amount: number }[]
 }) {
   const supabase = await createClient()
 
@@ -65,7 +65,7 @@ export async function updateDepositWithAllocations(
     amount: number
     reference_month: string
     description?: string
-    allocations: { area_id: string; amount: number }[]
+    allocations: { area_id: string; budget_line_id: string; amount: number }[]
   }
 ) {
   const supabase = await createClient()

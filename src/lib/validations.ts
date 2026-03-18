@@ -21,6 +21,7 @@ export const depositSchema = z.object({
 
 export const allocationSchema = z.object({
   area_id: z.string().uuid('Selecione uma área'),
+  budget_line_id: z.string().uuid('Selecione uma rubrica'),
   amount: z.number().min(0, 'Valor não pode ser negativo'),
 })
 

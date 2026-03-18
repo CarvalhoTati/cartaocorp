@@ -75,7 +75,9 @@ export default async function DepositosPage() {
                               className="w-2 h-2 rounded-full mr-1"
                               style={{ backgroundColor: alloc.area?.color }}
                             />
-                            {alloc.area?.name}: {formatCurrency(alloc.amount)}
+                            {alloc.area?.name}
+                            {alloc.budget_line?.name ? ` / ${alloc.budget_line.name}` : ''}
+                            : {formatCurrency(alloc.amount)}
                           </Badge>
                         ))}
                       </div>
